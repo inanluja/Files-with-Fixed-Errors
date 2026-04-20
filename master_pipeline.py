@@ -26,8 +26,8 @@ NB_DIR = r'P:\Application\Risk Mgmt\MRM\Python Projects\ARMS'
 
 # All Excel files that must be updated today to trigger the pipeline
 DATA_DIR         = r'P:\Application\Risk Mgmt\MRM\ARMS\arms_data_storage'
-EXCEL_PORTFOLIO  = os.path.join(DATA_DIR, 'securities_portfolio.xlsx')
-EXCEL_BLOOMBERG  = os.path.join(DATA_DIR, 'Source_Data_Bloom.xlsx')
+EXCEL_PORTFOLIO  = os.path.join(DATA_DIR, 'securities_portfolio.xlsm')
+EXCEL_BLOOMBERG  = os.path.join(DATA_DIR, 'Source_Data_Bloom.xlsm')
 EXCEL_OAS_EM     = os.path.join(DATA_DIR, 'Emustruuindex.xlsx')
 EXCEL_OAS_GLOBAL = os.path.join(DATA_DIR, 'I04064US_index.xlsx')
 
@@ -112,11 +112,13 @@ def run_notebook(nb_name):
     logging.info(f'Running: {nb_name}')
     result = subprocess.run(
         [
-            'jupyter', 'nbconvert',
+            r'C:\ProgramData\anaconda3\Scripts\jupyter',
+            'nbconvert',
             '--to', 'notebook',
             '--execute',
             '--inplace',
-            f'--ExecutePreprocessor.timeout=900',   # 15 min max per notebook
+            '--ExecutePreprocessor.timeout=900',        # 15 min max per notebook
+            '--ExecutePreprocessor.startup_timeout=120', # 2 min for kernel to start
             nb_path
         ],
         capture_output=True,
@@ -163,11 +165,11 @@ def send_error_email(error_message):
 def get_stop_loss_path(valuation_date):
     """Builds the dynamic monthly folder path for the Stop Loss report."""
     vd = date.fromisoformat(valuation_date)
-    month_folder = vd.strftime('%m.%B')    # e.g. '04.April'
+    month_folder = f'{vd.month}.{vd.strftime("%B")}'   # e.g. '4.April' (no leading zero)
     year_folder  = vd.strftime('%Y')
     filename     = f'Stop-Loss check {valuation_date}.xlsx'
     return os.path.join(
-        r'P:\Application\Risk Mgmt\MRM\ARMS\REPORTS (internal)\DAILY\Stop-Loss Monitoring',
+        r'P:\Application\Risk Mgmt\MRM\REPORTS (internal)\DAILY\Stop-Loss Monitoring',
         year_folder, month_folder, filename
     )
 
@@ -242,6 +244,14 @@ def main():
         )
 
         # ── Step 10: Send Stop Loss email ─────────────────────────────────────
+        try:
+            status_file = os.path.join(NB_DIR, 'stop_loss_status.txt')
+            if os.path.exists(status_file):
+                stop_loss_status = open(status_file, encoding='utf-8').read().strip() or 'See attached'
+            else:
+                stop_loss_status = 'See attached'
+        except Exception:
+            stop_loss_status = 'See attached'
         send_email(
             to='Nazir.Davudov@pashabank.az; Narmin.Ahmadzada@pashabank.az; '
                'Nijat.Piriyev@pashabank.az; HasanO.Aliyev@pashabank.az',
@@ -252,6 +262,7 @@ def main():
             body=(
                 f'Dear colleagues,\n\n'
                 f'Please find attached result of stop-loss check as of {valuation_date}.\n\n'
+                f'Status: {stop_loss_status}\n\n'
                 f'Best Regards,\nMRM Team'
             ),
             attachment_path=get_stop_loss_path(valuation_date)
