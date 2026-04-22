@@ -113,13 +113,20 @@ def set_valuation_date(nb_path, valuation_date):
         json.dump(nb, f, ensure_ascii=False, indent=1)
 
 
+GREEN  = '\033[92m'
+YELLOW = '\033[93m'
+RED    = '\033[91m'
+RESET  = '\033[0m'
+
+
 def run_notebook(nb_name):
     """Executes a notebook in-place using nbconvert."""
     nb_path = os.path.join(NB_DIR, nb_name)
+    print(f'  {YELLOW}► Running:{RESET} {nb_name}')
     logging.info(f'Running: {nb_name}')
     result = subprocess.run(
         [
-            r'C:\ProgramData\anaconda3\Scripts\jupyter',
+            r'C:\Users\AJ003230\AppData\Local\anaconda3\Scripts\jupyter',
             'nbconvert',
             '--to', 'notebook',
             '--execute',
@@ -133,9 +140,11 @@ def run_notebook(nb_name):
         cwd=LOCAL_DIR   # notebooks resolve relative 'arms_database.db' from here (local fast copy)
     )
     if result.returncode != 0:
+        print(f'  {RED}✗ Failed:{RESET} {nb_name}')
         raise RuntimeError(
             f'{nb_name} failed.\n\nSTDERR:\n{result.stderr[-2000:]}'
         )
+    print(f'  {GREEN}✓ Done:{RESET}    {nb_name}')
     logging.info(f'Done: {nb_name}')
 
 
@@ -191,6 +200,9 @@ def main():
     setup_logging()
     logging.info('=' * 60)
     logging.info('Pipeline started')
+    print(f'\n{GREEN}{"="*50}{RESET}')
+    print(f'{GREEN}  ARMS Pipeline started — {date.today()}{RESET}')
+    print(f'{GREEN}{"="*50}{RESET}\n')
 
     # ── Step 1: Check if all 4 Excel files were updated today ────────────────
     if not files_updated_today(EXCEL_PORTFOLIO, EXCEL_BLOOMBERG, EXCEL_OAS_EM, EXCEL_OAS_GLOBAL):
@@ -205,8 +217,10 @@ def main():
 
     # ── Step 2b: Copy DB from network to local disk (fast reads/writes) ──────
     os.makedirs(LOCAL_DIR, exist_ok=True)
+    print(f'  {YELLOW}► Copying DB to local...{RESET}')
     logging.info(f'Copying DB from network to local: {LOCAL_DB}')
     shutil.copy2(NETWORK_DB, LOCAL_DB)
+    print(f'  {GREEN}✓ Local DB ready{RESET}\n')
     logging.info('Local DB ready.')
 
     try:
@@ -239,8 +253,10 @@ def main():
         # ── Step 6b: Copy updated DB back to network ─────────────────────────
         # Done right after metrics so reports below read the fresh data either
         # from local (fast) or network (consistent) — both are identical now.
+        print(f'\n  {YELLOW}► Copying DB back to network...{RESET}')
         logging.info('Copying updated DB back to network...')
         shutil.copy2(LOCAL_DB, NETWORK_DB)
+        print(f'  {GREEN}✓ Network DB updated{RESET}\n')
         logging.info('Network DB updated.')
 
         # ── Step 7: Generate Bond Prices report ──────────────────────────────
@@ -288,6 +304,9 @@ def main():
             attachment_path=get_stop_loss_path(valuation_date)
         )
 
+        print(f'\n{GREEN}{"="*50}{RESET}')
+        print(f'{GREEN}  ✓ Pipeline completed successfully!{RESET}')
+        print(f'{GREEN}{"="*50}{RESET}\n')
         logging.info('Pipeline completed successfully.')
 
     except Exception as e:
