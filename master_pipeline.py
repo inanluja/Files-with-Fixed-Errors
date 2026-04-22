@@ -12,6 +12,7 @@ Logic:
 import os
 import json
 import re
+import shutil
 import subprocess
 import logging
 import win32com.client as win32
@@ -21,8 +22,14 @@ from pathlib import Path
 
 # ─── CONFIG — adjust these paths on your work PC ──────────────────────────────
 
-# Folder where all .ipynb notebooks and arms_database.db live
+# Folder where all .ipynb notebooks and arms_database.db live (network share)
 NB_DIR = r'P:\Application\Risk Mgmt\MRM\Python Projects\ARMS'
+
+# Local folder where the DB is copied during pipeline run (fast local disk)
+# The pipeline reads/writes here, then copies the result back to NB_DIR at the end.
+LOCAL_DIR   = r'C:\Users\AJ003230\ARMS_local'
+LOCAL_DB    = os.path.join(LOCAL_DIR, 'arms_database.db')
+NETWORK_DB  = os.path.join(NB_DIR,  'arms_database.db')
 
 # All Excel files that must be updated today to trigger the pipeline
 DATA_DIR         = r'P:\Application\Risk Mgmt\MRM\ARMS\arms_data_storage'
@@ -123,7 +130,7 @@ def run_notebook(nb_name):
         ],
         capture_output=True,
         text=True,
-        cwd=NB_DIR   # important — notebooks use relative db path 'arms_database.db'
+        cwd=LOCAL_DIR   # notebooks resolve relative 'arms_database.db' from here (local fast copy)
     )
     if result.returncode != 0:
         raise RuntimeError(
@@ -196,6 +203,12 @@ def main():
     valuation_date = get_previous_working_day()
     logging.info(f'Valuation date: {valuation_date}')
 
+    # ── Step 2b: Copy DB from network to local disk (fast reads/writes) ──────
+    os.makedirs(LOCAL_DIR, exist_ok=True)
+    logging.info(f'Copying DB from network to local: {LOCAL_DB}')
+    shutil.copy2(NETWORK_DB, LOCAL_DB)
+    logging.info('Local DB ready.')
+
     try:
         # ── Step 3: Inject valuation_date into notebooks that use it ─────────
         # import_data_from_excel.ipynb has no valuation_date — skipped intentionally
@@ -222,6 +235,13 @@ def main():
 
         # ── Step 6: Run metrics calculation ──────────────────────────────────
         run_notebook('Metrics_calculation.ipynb')
+
+        # ── Step 6b: Copy updated DB back to network ─────────────────────────
+        # Done right after metrics so reports below read the fresh data either
+        # from local (fast) or network (consistent) — both are identical now.
+        logging.info('Copying updated DB back to network...')
+        shutil.copy2(LOCAL_DB, NETWORK_DB)
+        logging.info('Network DB updated.')
 
         # ── Step 7: Generate Bond Prices report ──────────────────────────────
         run_notebook('Report_Bond_Prices.ipynb')
